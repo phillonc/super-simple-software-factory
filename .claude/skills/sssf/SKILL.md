@@ -6,7 +6,7 @@ argument-hint: "[install | create adw | run adw | update config | ...]"
 
 # Super Simple Software Factory (SSSF)
 
-Reusable combination of **agents plus code**: deterministic Python ADW scripts own sequencing, retries, and acceptance; coding agents (Pi in v1) work inside bounded phases; typed JSON envelopes carry context between them; everything streams into SQLite for the polled visualizer. Agent proposes, code disposes.
+Reusable combination of **agents plus code**: deterministic Python ADW scripts own sequencing, retries, and acceptance; coding agents (Pi or Claude Code) work inside bounded phases; typed JSON envelopes carry context between them; everything streams into SQLite for the polled visualizer. Agent proposes, code disposes.
 
 ## Startup
 
@@ -75,6 +75,15 @@ Deep specs, when needed: [references/config.md](references/config.md) · [refere
 10. **Every ADW ends in `run.finish()`** — phases passing is not the same as the run being accepted. A test phase that ran a red suite succeeded at its job. Pass `accepted=` so the exit code, the session status, and the banner are decided together and cannot disagree.
 11. **A decision a human owns is never a field an agent fills in** — a checkpoint is an `engineer` phase resolved through `adw_modules/human.py`, which is the only code that constructs a `HumanDecision`. Agents may prepare the choice (`DecisionPackOutput`: options, consequences, a recommendation) and `gates.decision_is_the_humans` fails any pack that arrives pre-decided. There is no default verdict and no timeout that means yes: a checkpoint with nobody to answer it stops the run. Every answer is committed to `adws/adw_decisions/`, a `protected_files` path, whichever way it went.
 
-## v1 scope
+## Coding agents
 
-Pi coding agent only (`coding_agent: pi`), default model `gemini-3.6-flash` via openrouter, thinking `medium`. `claude_code` is schema-valid but stubbed until v2. The visualizer app ships in a later pass — observe via sqlite queries until then.
+Two, selected per agent (or per roster) with `coding_agent:`. Both implement the same three names — `run`, `resolve_model`, `ToolCallTracker` — and `agents.INTERFACES` dispatches between them, so ADWs, gates, prompts and `writes:` boundaries are written once and run on either.
+
+| `coding_agent` | Binary | Default model | Notes |
+|---|---|---|---|
+| `pi` | `pi` | `google/gemini-3.6-flash` | model patterns are `provider/id` and resolve against pi's catalog |
+| `claude_code` | `claude` | `sonnet` | model is an alias (`opus`, `sonnet`, `haiku`) or a full id; `thinking:` maps to `--effort` |
+
+Differences the interfaces absorb so nothing above them has to care: Pi's `--session-id` is create-or-continue while Claude Code splits create (`--session-id`) from continue (`--resume`) and requires a UUID; the roster's tool vocabulary (`read`, `bash`, `grep`) is translated per interface; and Claude Code takes its prompt on **stdin**, because `--tools`/`--allowedTools` are variadic and swallow a trailing argv prompt.
+
+The visualizer app ships in a later pass — observe via sqlite queries until then.

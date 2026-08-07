@@ -78,6 +78,24 @@ def commit_paths(message: str, paths: list[str]) -> str:
     return _git("rev-parse", "--short", "HEAD")
 
 
+def deleted_files() -> list[str]:
+    """Paths git records as deleted, staged or not.
+
+    A file an agent removed is a file it changed, so an envelope that reports it
+    is telling the truth — but it is not on disk to be stat'd. This is how a
+    gate tells "deleted, and said so" apart from "claimed something that never
+    existed". Porcelain marks deletion in either status column (` D`, `D `,
+    `AD`), so both are checked.
+    """
+    if not is_repo():
+        return []
+    paths = []
+    for line in _git("status", "--porcelain").splitlines():
+        if len(line) > 3 and "D" in line[:2]:
+            paths.append(line[3:].strip().strip('"'))
+    return paths
+
+
 def changed_files() -> list[str]:
     out = _git("status", "--porcelain")
     return [line[3:] for line in out.splitlines() if line]

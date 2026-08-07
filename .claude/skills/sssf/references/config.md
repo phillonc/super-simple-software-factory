@@ -44,7 +44,7 @@ agents:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `coding_agent` | `pi` \| `claude_code` | Which interface runs the agent. **v1 implements `pi` only**; `claude_code` is specced and stubbed in `agent_cc.py`, landing in v2. |
+| `coding_agent` | `pi` \| `claude_code` | Which interface runs the agent — `adw_modules/agent_pi.py` or `adw_modules/agent_cc.py`. Both are implemented; `agents.INTERFACES` dispatches. Model syntax differs: `provider/id` for pi, an alias or full id for Claude Code. |
 | `model` | string | Model id. For Pi, any id registered in `~/.pi/agent/models.json`. Default `gemini-3.6-flash`. |
 | `thinking` | enum | Reasoning effort — see below. Default `medium`. |
 | `color` | hex string | Lane color for every agent that does not set its own. Default empty — the visualizer falls back to its own palette. |

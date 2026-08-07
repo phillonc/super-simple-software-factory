@@ -14,6 +14,7 @@ import json
 import subprocess
 from pathlib import Path
 
+from . import git_helper
 from .data_types import DSDM_PRINCIPLES, EnvelopeBase, GateReport
 
 TAIL_CHARS = 1000        # command output kept as evidence on a failure
@@ -59,12 +60,27 @@ def json_parses(envelope: EnvelopeBase, run) -> GateReport:
 
 
 def diff_matches_claims(envelope: EnvelopeBase, run) -> GateReport:
-    """Every file claimed changed must exist on disk."""
+    """Every file claimed changed must exist on disk — or be a recorded deletion.
+
+    Deleting a file IS changing it, and an agent that reports the deletion is
+    being accurate. Checking existence alone punished exactly that: a developer
+    that replaced a placeholder test with real ones, and said so, failed the
+    gate for telling the truth. So a path that is gone is accepted when git
+    records it as deleted, and rejected when git has never heard of it — which
+    is the case this gate exists to catch.
+    """
     report = GateReport()
-    for f in getattr(envelope, "changed_files", []):
+    claims = list(getattr(envelope, "changed_files", []))
+    deleted = set(git_helper.deleted_files()) if claims else set()
+    for f in claims:
         p = Path(f)
-        report.check(f, p.exists(),
-                     f"exists, {_size(p)}" if p.exists() else "claimed changed file does not exist")
+        if p.exists():
+            report.check(f, True, f"exists, {_size(p)}")
+        elif f in deleted:
+            report.check(f, True, "deleted, and git agrees")
+        else:
+            report.check(f, False, "claimed changed file does not exist, and git "
+                                   "records no deletion of it")
     return report
 
 

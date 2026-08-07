@@ -153,6 +153,7 @@ def main(prompt: str, config: str = "adws/adw_sssf_config/sssf.config.dsdm.yaml"
     previous = agreed
     for i in range(1, spec.max_refine_loops + 1):
         with run.phase(PhaseParams(name=f"build_{i}", kind="agent", owner="solution_developer",
+                                   retries=1,
                                    description="Build in MoSCoW order against the clock, "
                                                "Musts before anything else")) as ph:
             box.log(ph, loop=i)

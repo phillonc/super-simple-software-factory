@@ -10,9 +10,17 @@ all of it:
 Everything below is that rule, made mechanical. Run it with `--config`:
 
 ```bash
+# on Pi
 uv run adws/adw_dsdm_foundations.py "Add SSO so enterprise customers stop sharing logins." \
     --config adws/adw_sssf_config/sssf.config.dsdm.yaml
+
+# the same roster on Claude Code — same agents, same prompts, same boundaries
+uv run adws/adw_dsdm_foundations.py "Add SSO so enterprise customers stop sharing logins." \
+    --config adws/adw_sssf_config/sssf.config.dsdm.cc.yaml
 ```
+
+Two rosters, one workflow. `coding_agent:` is the only meaningful difference
+between them, which is the point: ADWs, gates and prompts are written once.
 
 or through the recipes: `just foundations "…"`, `just timebox --adw-id <id> "…"`,
 `just coach <id>`, `just decisions`.
