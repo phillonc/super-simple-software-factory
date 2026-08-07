@@ -21,6 +21,8 @@ Three steps. Then stop.
 |---|---|---|
 | adw_scout | engineer → scout | read-only recon; nothing changes |
 | adw_simple_sdlc | plan → build → test → review → document, 3 commits | the work is real and its shape is not obvious |
+| adw_dsdm_foundations | requirements → constraints → architecture → pack → YOU decide | the work needs agreeing before it needs building |
+| adw_dsdm_timebox | investigate → build/test/accept (bounded) → pack → YOU decide | one fixed-length box against agreed foundations |
 ```
 
 **Nothing else.** No trace-db queries, no reading the config or the ADW scripts' bodies, no repo inventory, no last-runs summary, no diagnosing an old failure, no "current state" dashboard. None of it was asked for, and it is not free:
@@ -47,6 +49,7 @@ You run the system, observe the system, and help the user interact with it. **Yo
 | Request | Cookbook |
 |---|---|
 | `/sssf install`, set up the factory in this repo | [cookbooks/install.md](cookbooks/install.md) |
+| DSDM roster, human checkpoints, timeboxes, MoSCoW | [cookbooks/dsdm.md](cookbooks/dsdm.md) |
 | create a new ADW / workflow | [cookbooks/create_adw.md](cookbooks/create_adw.md) |
 | modify an existing ADW chain | [cookbooks/update_adw.md](cookbooks/update_adw.md) |
 | create the config / agent roster | [cookbooks/create_config.md](cookbooks/create_config.md) |
@@ -70,6 +73,7 @@ Deep specs, when needed: [references/config.md](references/config.md) · [refere
 8. **A known command is code, not an agent** — if you can write the invocation down (`bun test`, `ruff check`), it belongs in a `kind="code"` phase via `adw_modules/quality.py`. Agents are for the parts that need reading and deciding; failures come back to the builder as an envelope either way.
 9. **`tools:` is a capability list, `writes:` is the boundary** — `bash` runs anything (including `git checkout`) and `write` reaches any path, so a tool list can never make "this agent changes nothing" true. `writes:` per agent and `protected_files` in defaults are enforced in `adw_modules/permissions.py` after every agent call: unauthorized changes are rolled back and the phase dies. The session runtime under `data_dir` is always writable — a read-only agent is read-only with respect to the REPO, never mute.
 10. **Every ADW ends in `run.finish()`** — phases passing is not the same as the run being accepted. A test phase that ran a red suite succeeded at its job. Pass `accepted=` so the exit code, the session status, and the banner are decided together and cannot disagree.
+11. **A decision a human owns is never a field an agent fills in** — a checkpoint is an `engineer` phase resolved through `adw_modules/human.py`, which is the only code that constructs a `HumanDecision`. Agents may prepare the choice (`DecisionPackOutput`: options, consequences, a recommendation) and `gates.decision_is_the_humans` fails any pack that arrives pre-decided. There is no default verdict and no timeout that means yes: a checkpoint with nobody to answer it stops the run. Every answer is committed to `adws/adw_decisions/`, a `protected_files` path, whichever way it went.
 
 ## v1 scope
 

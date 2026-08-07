@@ -128,6 +128,313 @@ class DocumentOutput(EnvelopeBase):
     commit_message: str = ""
 
 
+# ── DSDM: requirements, timeboxes, and the human's decisions ─────────────────
+#
+# The DSDM roster's envelopes. Three ideas carry every one of them:
+#
+#   1. A requirement without a business justification is not a requirement
+#      (principle 1). The field is on the type, so a gate can refuse it.
+#   2. Priority is MoSCoW and priority is measured — `effort` exists so
+#      `gates.moscow_balanced` can check the Must share against the DSDM
+#      threshold instead of taking an agent's word that the list is balanced.
+#   3. A decision the human owns is never a field an agent fills in. The
+#      facilitator produces OPTIONS (`DecisionPackOutput`); the verdict lives in
+#      `HumanDecision`, which only `adw_modules/human.py` ever constructs.
+
+MoSCoW = Literal["must", "should", "could", "wont"]
+
+# Every principle the coach rules on. Named here rather than in a prompt so the
+# gate and the agent are reading the same list.
+DSDM_PRINCIPLES = [
+    "focus_on_the_business_need",
+    "deliver_on_time",
+    "collaborate",
+    "never_compromise_quality",
+    "build_incrementally_from_firm_foundations",
+    "develop_iteratively",
+    "communicate_continuously_and_clearly",
+    "demonstrate_control",
+]
+
+
+class AcceptanceCriterion(BaseModel):
+    """One observable statement that decides whether a requirement is met."""
+
+    id: str                         # AC-01, unique within its requirement
+    statement: str                  # observable, in the business's own words
+    # Who or what settles it: "code: uv run pytest -q", "agent: solution_tester",
+    # or "human". Naming a runner is how a criterion stops being an opinion —
+    # and a criterion only a human can settle is a criterion that must reach one.
+    verified_by: str = ""
+
+
+class Requirement(BaseModel):
+    """One entry in the Prioritised Requirements List."""
+
+    id: str                         # REQ-01, stable for the life of the project
+    need: str                       # what the business needs, in its words
+    business_justification: str     # WHY it is needed — principle 1, gated
+    moscow: MoSCoW
+    # Relative effort, any consistent unit. Not an estimate of truth — it exists
+    # so the Must/Should/Could split can be MEASURED rather than asserted.
+    effort: int = 1
+    acceptance_criteria: list[AcceptanceCriterion] = Field(default_factory=list)
+
+
+class PrioritisedRequirementsOutput(EnvelopeBase):
+    """The PRL: what the business needs, why, and in what order it matters."""
+
+    business_need: str = ""         # one paragraph: the problem being solved
+    requirements: list[Requirement] = Field(default_factory=list)
+    out_of_scope: list[str] = Field(default_factory=list)
+    commit_message: str = ""
+
+
+class Escalation(BaseModel):
+    """Something the ambassador refused to settle on the business's behalf."""
+
+    question: str
+    why_human: str                  # why an agent must not answer this one
+    options: list[str] = Field(default_factory=list)
+    blocks: list[str] = Field(default_factory=list)      # requirement ids held up
+
+
+class AmbassadorOutput(EnvelopeBase):
+    """The PRL sharpened for one timebox, plus what the agent would not decide."""
+
+    timebox: str = ""
+    requirements: list[Requirement] = Field(default_factory=list)
+    escalations: list[Escalation] = Field(default_factory=list)
+
+
+class Constraint(BaseModel):
+    """A specialist limit the solution has to live within."""
+
+    area: str                       # security | compliance | ops | data | cost | ...
+    constraint: str
+    applies_to: list[str] = Field(default_factory=list)  # requirement ids
+    source: str = ""                # file:line, or the document it came from
+
+
+class AdvisoryOutput(EnvelopeBase):
+    """Specialist input. Every constraint cites where it came from."""
+
+    constraints: list[Constraint] = Field(default_factory=list)
+
+
+class FoundationsOutput(EnvelopeBase):
+    """Firm foundations — enough architecture to start, not a finished design."""
+
+    architecture_path: str = ""     # Solution Architecture Definition
+    development_approach_path: str = ""   # how quality is assured, and to what level
+    risks: list[str] = Field(default_factory=list)
+    open_questions: list[str] = Field(default_factory=list)
+    firm_enough_to_start: bool = False
+    commit_message: str = ""
+
+
+class DecisionOption(BaseModel):
+    """One thing the human could choose, and what follows from choosing it."""
+
+    id: str                         # OPT-A
+    option: str
+    consequence: str
+    impact_on_musts: str = ""       # which Musts this option puts at risk, if any
+    reversibility: Literal["reversible", "costly", "irreversible"] = "reversible"
+
+
+class DecisionPackOutput(EnvelopeBase):
+    """What the facilitator prepares FOR a human checkpoint. Never a verdict.
+
+    `decided` exists so the absence of a verdict is checkable rather than
+    assumed: `gates.decision_is_the_humans` fails any pack that arrives with it
+    set. An agent that answers the question it was asked to frame has taken the
+    human out of the loop, and that is the one failure this roster exists to
+    make impossible.
+    """
+
+    checkpoint: str = ""            # the control point this pack is for
+    question: str = ""              # the ONE thing the human must settle
+    options: list[DecisionOption] = Field(default_factory=list)
+    recommendation: str = ""        # an option id — advice, never an answer
+    if_no_decision: str = ""        # what happens if the human says nothing
+    decided: bool = False           # ALWAYS false. Gated.
+
+
+HumanVerdict = Literal["go", "go_with_changes", "no_go"]
+DecisionSource = Literal["prompt", "file", "preapproved"]
+
+
+class HumanDecisionRequest(BaseModel):
+    """Everything a checkpoint needs to put a decision in front of a human."""
+
+    checkpoint: str                 # short id: foundations_approval, timebox_review
+    question: str
+    options: list[DecisionOption] = Field(default_factory=list)
+    recommendation: str = ""        # option id the facilitator advises
+    if_no_decision: str = ""
+    pack_path: str = ""             # the write-up the human should read first
+    # Deliberately absent: any notion of a default verdict. A checkpoint with
+    # nobody to answer it stops the run — it does not assume consent.
+
+
+class HumanDecision(BaseModel):
+    """A verdict, and the trail proving a human gave it.
+
+    Only `adw_modules/human.py` constructs this. No agent can emit one, because
+    no agent's output type contains it.
+    """
+
+    checkpoint: str
+    verdict: HumanVerdict
+    decided_by: str
+    rationale: str = ""
+    chosen_option: str = ""
+    decided_at: str = ""
+    source: DecisionSource = "prompt"
+    record_path: str = ""           # the decision record — JSON, for tools
+    readable_path: str = ""         # the same record as prose, for people
+    digest: str = ""                # sha256 of record_path, mirrored into the trace
+
+    @property
+    def proceed(self) -> bool:
+        return self.verdict != "no_go"
+
+    @property
+    def records(self) -> list[str]:
+        """Both files, for the commit phase. Neither is the backup of the other:
+        the JSON is what `verify()` digests, the prose is what anyone reviewing
+        this decision a year from now will actually open."""
+        return [p for p in (self.record_path, self.readable_path) if p]
+
+
+class DecisionOutput(EnvelopeBase):
+    """A human decision shaped as an envelope, so agents can be handed one.
+
+    Same adapter idea as VerifyOutput and ChangesOutput: the decision came from
+    a person, not an agent, and it reaches the next agent through the one door
+    every handoff uses.
+    """
+
+    checkpoint: str = ""
+    verdict: str = ""
+    chosen_option: str = ""
+    decided_by: str = ""
+    rationale: str = ""
+    record_path: str = ""
+
+
+class TimeboxSpec(BaseModel):
+    """A fixed-length box of work. The end date is the one thing that cannot move."""
+
+    name: str
+    minutes: int = 30               # wall clock, from kick-off
+    max_refine_loops: int = 3
+    objective: str = ""
+
+
+class TimeboxStatus(BaseModel):
+    """Where a timebox is against its own clock. Pure arithmetic, no judgement."""
+
+    name: str
+    minutes: int
+    started_at: str = ""
+    elapsed_seconds: float = 0.0
+    remaining_seconds: float = 0.0
+    expired: bool = False
+
+    @property
+    def spent_share(self) -> float:
+        total = self.minutes * 60
+        return 1.0 if total <= 0 else min(1.0, self.elapsed_seconds / total)
+
+
+class DescopePlan(BaseModel):
+    """What comes out of the timebox when the clock beats the work.
+
+    DSDM descopes, it does not slip: Coulds go first, then Shoulds. A Must that
+    will not fit is NOT in `drop` — it is in `musts_at_risk`, which is a
+    question for the human, not an outcome code may choose.
+    """
+
+    outstanding: list[str] = Field(default_factory=list)   # requirement ids not done
+    drop: list[str] = Field(default_factory=list)          # Coulds then Shoulds
+    musts_at_risk: list[str] = Field(default_factory=list)
+    reason: str = ""
+
+    @property
+    def needs_human(self) -> bool:
+        return bool(self.musts_at_risk)
+
+
+class TimeboxOutput(EnvelopeBase):
+    """The clock and the descope plan, as an envelope an agent can read."""
+
+    timebox: str = ""
+    minutes: int = 0
+    remaining_seconds: float = 0.0
+    expired: bool = False
+    outstanding: list[str] = Field(default_factory=list)
+    drop: list[str] = Field(default_factory=list)
+    musts_at_risk: list[str] = Field(default_factory=list)
+
+
+class DeferredItem(BaseModel):
+    """Work the developer did not do, and why. Carries its own priority.
+
+    `moscow` rides along so `gates.musts_not_descoped` can rule without going
+    back to the PRL — an agent that quietly drops a Must has to write down that
+    it was a Must in order to do it.
+    """
+
+    requirement_id: str
+    moscow: MoSCoW
+    reason: str = ""
+
+
+class IncrementOutput(EnvelopeBase):
+    """What the solution developer built in this timebox, and what it left."""
+
+    changed_files: list[str] = Field(default_factory=list)
+    requirements_addressed: list[str] = Field(default_factory=list)
+    deferred: list[DeferredItem] = Field(default_factory=list)
+    commit_message: str = ""
+
+
+class CriterionResult(BaseModel):
+    """One acceptance criterion, ruled on with evidence."""
+
+    requirement_id: str
+    moscow: MoSCoW
+    criterion_id: str
+    passed: bool
+    evidence: str = ""              # file:line, command output, or what is missing
+
+
+class AcceptanceOutput(EnvelopeBase):
+    """Whether the increment meets the criteria the business agreed to."""
+
+    accepted: bool = False
+    results: list[CriterionResult] = Field(default_factory=list)
+    unmet_musts: list[str] = Field(default_factory=list)
+
+
+class PrincipleFinding(BaseModel):
+    """The coach's ruling on one of the eight principles."""
+
+    principle: str                  # one of DSDM_PRINCIPLES, verbatim
+    upheld: bool
+    evidence: str = ""              # what in the trace or the repo shows it
+    corrective_action: str = ""     # required when upheld is false
+
+
+class CoachOutput(EnvelopeBase):
+    """An audit of a run against the eight principles. Advisory, never blocking."""
+
+    findings: list[PrincipleFinding] = Field(default_factory=list)
+    breaches: list[str] = Field(default_factory=list)
+
+
 # ── Deterministic quality blocks ─────────────────────────────────────────────
 
 QualityArea = Literal["frontend", "backend"]

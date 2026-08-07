@@ -60,6 +60,30 @@ sdlc *ARGS:
 simple-sdlc *ARGS:
     uv run adws/adw_simple_sdlc.py --config {{config}} "$@"
 
+# ── DSDM: the governed chain, with a human at each control point ────────────
+# These run against the DSDM roster, not the starter one, so they pass their own
+# --config rather than {{config}}. Add --decide/--decision-file to answer a
+# checkpoint without a terminal; with neither, a non-interactive run STOPS at
+# the checkpoint rather than assuming you would have said yes.
+
+dsdm_config := env_var_or_default("SSSF_DSDM_CONFIG", "adws/adw_sssf_config/sssf.config.dsdm.yaml")
+
+# requirements, constraints, architecture, then YOU approve: just foundations "add SSO"
+foundations *ARGS:
+    uv run adws/adw_dsdm_foundations.py --config {{dsdm_config}} "$@"
+
+# one timebox against a foundations session: just timebox --adw-id <id> --minutes 30 "build REQ-01..03"
+timebox *ARGS:
+    uv run adws/adw_dsdm_timebox.py --config {{dsdm_config}} "$@"
+
+# audit a run against the 8 principles, exits 1 on a breach: just coach <adw_id>
+coach ADW_ID:
+    uv run adws/adw_dsdm_coach.py {{ADW_ID}} --config {{dsdm_config}}
+
+# every decision a human took, newest first
+decisions:
+    @sqlite3 {{db}} "select adw_id, json_extract(payload_json,'$.checkpoint'), json_extract(payload_json,'$.verdict'), json_extract(payload_json,'$.decided_by'), json_extract(payload_json,'$.source') from events where type='log' and name='human_decision' order by rowid desc limit 20;"
+
 # ── watch it ────────────────────────────────────────────────────────────────
 # Reads never block a running workflow, the db is WAL. Poll as hard as you like.
 

@@ -4,6 +4,8 @@ The full `sssf.config.yaml` spec: every field, how defaults merge, and how model
 
 It lives at **`adws/adw_sssf_config/sssf.config.yaml`** — the default path every `adw_*.py` and the justfile resolve, and where `install.py` / `make_config.py` stamp it. Pass `--config <path>` to any ADW (or set `SSSF_CONFIG` for the justfile) to run against a different roster.
 
+A second roster ships beside it: **`sssf.config.dsdm.yaml`**, the DSDM agent set, which the `adw_dsdm_*` chains default to. Both are valid rosters over the same modules — neither is the "other" install. It is also the worked example of `protected_files` used for something other than the factory's own code: it protects `adws/adw_decisions/`, the record of what humans decided, from every agent in the roster. See [../cookbooks/dsdm.md](../cookbooks/dsdm.md).
+
 ## Shape
 
 ```yaml
