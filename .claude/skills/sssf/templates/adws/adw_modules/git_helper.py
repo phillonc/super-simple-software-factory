@@ -53,6 +53,49 @@ def commit_all(message: str) -> str:
     return _git("rev-parse", "--short", "HEAD")
 
 
+def commit_paths(message: str, paths: list[str]) -> str:
+    """Stage and commit ONLY these paths. Returns the new short sha, or "".
+
+    `commit_all` sweeps the whole tree, which is right when a phase's product IS
+    the tree. It is wrong for anything that must land on its own regardless of
+    what else is dirty — a human's decision record, in particular, which has to
+    become tracked whether the run went on to build or was stopped right there.
+
+    Returns "" when the paths hold nothing new, rather than raising: committing
+    the same record twice is a no-op, not an error.
+    """
+    if not is_repo():
+        raise RuntimeError(
+            "not a git repository — a commit phase needs one. Run `git init` in the "
+            "repo root (and make a first commit) before running an ADW that commits.")
+    existing = [p for p in paths if (repo_root() / p).exists()]
+    if not existing:
+        return ""
+    _git("add", "--", *existing)
+    if not _git("diff", "--cached", "--name-only", "--", *existing):
+        return ""
+    _git("commit", "-m", message, "--", *existing)
+    return _git("rev-parse", "--short", "HEAD")
+
+
+def deleted_files() -> list[str]:
+    """Paths git records as deleted, staged or not.
+
+    A file an agent removed is a file it changed, so an envelope that reports it
+    is telling the truth — but it is not on disk to be stat'd. This is how a
+    gate tells "deleted, and said so" apart from "claimed something that never
+    existed". Porcelain marks deletion in either status column (` D`, `D `,
+    `AD`), so both are checked.
+    """
+    if not is_repo():
+        return []
+    paths = []
+    for line in _git("status", "--porcelain").splitlines():
+        if len(line) > 3 and "D" in line[:2]:
+            paths.append(line[3:].strip().strip('"'))
+    return paths
+
+
 def changed_files() -> list[str]:
     out = _git("status", "--porcelain")
     return [line[3:] for line in out.splitlines() if line]

@@ -1,0 +1,211 @@
+# sssf.config.dsdm.yaml — the DSDM roster. One agent, one prompt, one purpose.
+#
+# The DSDM Agile Project Framework, staffed by agents, with the roles DSDM keeps
+# human kept human. Run it with --config, or SSSF_CONFIG for the justfile:
+#
+#     uv run adws/adw_dsdm_foundations.py "<request>" --config adws/adw_sssf_config/sssf.config.dsdm.yaml
+#
+# ── Who is NOT in this roster, and why ───────────────────────────────────────
+#
+#   Business Sponsor      HUMAN. Owns the business case and the money. Answers
+#   Business Visionary    HUMAN. Owns the vision and settles priority.
+#     Both appear in every chain as `engineer` checkpoint phases, resolved
+#     through adw_modules/human.py. There is no agent that can answer for them
+#     and no default verdict if they are absent — the run stops instead.
+#
+#   Project Manager       CODE. The ADW script owns sequencing, retries, and
+#   Team Leader           acceptance. That is the factory's founding trade:
+#                         agent proposes, code disposes. A "manager agent" that
+#                         re-decided the chain each run would make the one part
+#                         of the system that is deterministic stop being so.
+#
+#   Tester (the runner)   CODE. `solution_tester` rules on acceptance criteria,
+#                         which needs reading and deciding. RUNNING the suite is
+#                         a known command, so it is a kind="code" phase over
+#                         adw_modules/quality.py. See SKILL.md hard rule 8.
+#
+#   Timebox keeper        CODE. adw_modules/timebox.py holds the clock and
+#                         computes the descope plan. An agent asked to watch the
+#                         time has no clock; a subprocess does.
+
+defaults:
+  coding_agent: pi
+  model: google/gemini-3.6-flash   # provider/id — a bare pattern is ambiguous across providers
+  thinking: medium                 # off | minimal | low | medium | high | xhigh | max
+  harness_engineering: []
+  tools:
+    - read                         # read file contents
+    - bash                         # execute bash commands
+    - edit                         # find/replace edits
+    - write                        # create/overwrite files
+    - grep                         # search file contents  (pi default: OFF)
+    - find                         # find files by glob     (pi default: OFF)
+    - ls                           # list directories       (pi default: OFF)
+  # Off-limits to every agent that does not name them in its own `writes`.
+  protected_files:
+    - adws/adw_modules/
+    - adws/adw_sssf_config/
+    - adws/adw_*.py
+    # The human decision record. This is the one entry that is not about
+    # protecting the factory's code from the agents it runs — it is about
+    # protecting the humans' answers from them. Decisions live in the REPO
+    # rather than under data_dir precisely because the session runtime is
+    # writable by every agent by design (permissions.always_writable), and this
+    # artifact must not be. No agent names it in `writes`, so any agent that
+    # creates, edits or deletes a decision record has its change rolled back and
+    # its phase killed. The ADW commits each record the moment it is made, so a
+    # later tamper shows up in `git diff` as well.
+    - adws/adw_decisions/
+  data_dir: adws/adw_data          # runtime home: {data_dir}/sessions/{adw_id}/{agent_name}/
+
+observability:
+  db: adws/adw_data/sssf.db        # tracer writes here directly; the UI polls it
+  poll_ms: 500
+
+agents:
+  # ── Foundations ────────────────────────────────────────────────────────────
+
+  - name: business_analyst
+    model: fireworks/accounts/fireworks/models/kimi-k3
+    thinking: high
+    color: "#38bdf8"
+    purpose: Turn a request into a Prioritised Requirements List the business would recognise as its own.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/business_analyst/system.md
+      user: adws/adw_data/prompt_engineering/business_analyst/user.md
+    writes:                        # the PRL is the only thing it leaves in the repo
+      - specs/
+    tools:                         # full recon; write for the PRL, no edit — it changes no code
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: business_advisor
+    color: "#2dd4bf"
+    purpose: Supply the specialist constraints the solution must live within, each one sourced.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/business_advisor/system.md
+      user: adws/adw_data/prompt_engineering/business_advisor/user.md
+    writes: []                     # read-only: its constraints go to context_handoff/
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: technical_coordinator
+    model: openai/gpt-5.6-terra
+    thinking: high
+    color: "#818cf8"
+    purpose: Lay foundations firm enough to start on, and own the agreed quality level.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/technical_coordinator/system.md
+      user: adws/adw_data/prompt_engineering/technical_coordinator/user.md
+    writes:                        # architecture and development approach, nothing else
+      - specs/
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  # ── The boundary between the agents and the people ─────────────────────────
+
+  - name: workshop_facilitator
+    model: openai/gpt-5.6-terra
+    thinking: high
+    color: "#f472b6"
+    purpose: Frame the decision a human is about to take, and never take it.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/workshop_facilitator/system.md
+      user: adws/adw_data/prompt_engineering/workshop_facilitator/user.md
+    writes: []                     # read-only, and pointedly so: the agent that
+                                   # prepares a human decision has no way to
+                                   # write the record of one. gates.decision_is_the_humans
+                                   # stops it deciding; `writes: []` plus the
+                                   # protected adws/adw_decisions/ stops it forging.
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  # ── Evolutionary development ───────────────────────────────────────────────
+
+  - name: business_ambassador
+    color: "#fbbf24"
+    purpose: Speak for the business need inside a timebox, and escalate anything that changes what was agreed.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/business_ambassador/system.md
+      user: adws/adw_data/prompt_engineering/business_ambassador/user.md
+    writes: []                     # read-only: it sharpens requirements, it does not build
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: solution_developer
+    color: "#22d3ee"
+    purpose: Build the increment inside the timebox, in MoSCoW order, and report what was left.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/solution_developer/system.md
+      user: adws/adw_data/prompt_engineering/solution_developer/user.md
+    # No `writes` key: unrestricted, and the only agent in this roster that is.
+    # It still cannot touch defaults.protected_files — a developer does not get
+    # to edit its own grader, and it does not get to write a human's decision.
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - edit
+      - write
+
+  - name: solution_tester
+    model: openai/gpt-5.6-terra
+    thinking: high
+    color: "#fb7185"
+    purpose: Rule on the increment against the agreed acceptance criteria; change nothing.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/solution_tester/system.md
+      user: adws/adw_data/prompt_engineering/solution_tester/user.md
+    writes: []                     # a tester that cannot fix cannot quietly fix
+    tools:                         # full read surface; write only for acceptance.md, no edit
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  # ── Continuous improvement ─────────────────────────────────────────────────
+
+  - name: dsdm_coach
+    model: openai/gpt-5.6-luna
+    thinking: high
+    color: "#a3e635"
+    purpose: Audit a run against the eight DSDM principles from its trace; advise, never block.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/dsdm_coach/system.md
+      user: adws/adw_data/prompt_engineering/dsdm_coach/user.md
+    writes: []                     # read-only: it audits the factory, it does not repair it
+    tools:                         # bash is how it reads the trace db with sqlite3
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write

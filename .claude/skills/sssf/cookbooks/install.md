@@ -16,11 +16,13 @@ Run from the **target repo root** — the cwd is where everything lands. If the 
 
 | Stamped | From | Tracked? |
 |---|---|---|
-| `adws/adw_sssf_config/sssf.config.yaml` | `templates/sssf.config.yaml` | yes — the agent roster |
+| `adws/adw_sssf_config/sssf.config.yaml` | `templates/sssf.config.yaml` | yes — the starter agent roster |
+| `adws/adw_sssf_config/sssf.config.dsdm.yaml` | `templates/sssf.config.dsdm.yaml` | yes — the DSDM roster, run it with `--config`. See [dsdm.md](dsdm.md) |
 | `.env.sample` | `templates/env.sample` | yes |
-| `adws/adw_*.py` | `templates/adws/` | yes — the twelve starter ADWs |
+| `adws/adw_*.py` | `templates/adws/` | yes — the twelve starter ADWs, plus the three `adw_dsdm_*` chains |
 | `adws/adw_modules/` | `templates/adws/adw_modules/` | yes — all low-level logic |
 | `adws/adw_data/prompt_engineering/{planner,builder,scout,reviewer,documenter}/` | `templates/prompt_engineering/` | yes — **the user-owned home for prompts** |
+| `adws/adw_data/prompt_engineering/{business_analyst,business_advisor,technical_coordinator,workshop_facilitator,business_ambassador,solution_developer,solution_tester,dsdm_coach}/` | `templates/prompt_engineering/` | yes — the eight DSDM agents |
 | `adws/adw_data/harness_engineering/` | `templates/harness_engineering/` | yes — **the user-owned home for pi extensions** |
 | `justfile` | `templates/justfile` | yes — starter recipes: `just demo`, the workflows, the trace reads, `just obs` |
 | `adws/adw_data/sessions/`, `adws/adw_data/sssf.db` | created at runtime | no — gitignored |

@@ -8,8 +8,8 @@ Usage:
     uv run <skill>/scripts/install.py [--force]
 
 Stamps: adws/ (modules + starter ADWs), adws/adw_data/prompt_engineering/
-(4 starter agents), adws/adw_sssf_config/sssf.config.yaml, .env.sample,
-.gitignore entries.
+(4 starter agents + the 8 DSDM agents), adws/adw_sssf_config/sssf.config.yaml
+sssf.config.dsdm.yaml and sssf.config.dsdm.cc.yaml, .env.sample, .gitignore entries.
 Existing files are skipped unless --force.
 """
 
@@ -73,6 +73,19 @@ def main() -> int:
           root / "adws" / "adw_data" / "harness_engineering", args.force, stamped, skipped)
     stamp(TEMPLATES / "sssf.config.yaml",
           root / "adws" / "adw_sssf_config" / "sssf.config.yaml",
+          args.force, stamped, skipped)
+    # The DSDM roster ships alongside the starter one rather than replacing it.
+    # Both are valid rosters over the same modules; `--config` (or SSSF_CONFIG)
+    # picks which one a run uses, so a repo can hold the plain chain and the
+    # governed one without either being the "other" install.
+    stamp(TEMPLATES / "sssf.config.dsdm.yaml",
+          root / "adws" / "adw_sssf_config" / "sssf.config.dsdm.yaml",
+          args.force, stamped, skipped)
+    # The same DSDM roster on the other coding agent. Identical agents, prompts
+    # and boundaries; only `coding_agent` and the model ids differ. Which one you
+    # run depends on whether `pi` or `claude` is installed, not on the workflow.
+    stamp(TEMPLATES / "sssf.config.dsdm.cc.yaml",
+          root / "adws" / "adw_sssf_config" / "sssf.config.dsdm.cc.yaml",
           args.force, stamped, skipped)
     stamp(TEMPLATES / "env.sample", root / ".env.sample", args.force, stamped, skipped)
     # The recipes are part of the operating experience, and several cookbooks
