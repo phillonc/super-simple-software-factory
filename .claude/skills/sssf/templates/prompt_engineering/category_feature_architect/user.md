@@ -52,7 +52,7 @@ Respond with ONLY valid JSON matching `CategoryAnalysisOutput` — no prose befo
         {
           "code": "PRIOR_ART_UNCHECKED",
           "severity": "DEMOTING",
-          "detail": "no prior-art sweep has run against this candidate",
+          "detail": "no prior-art sweep on record, and the raw band is CATEGORY_DEFINING",
           "resolution": "run the sweep, then put the hits to a human adjudication"
         }
       ],

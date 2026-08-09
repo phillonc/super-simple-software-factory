@@ -28,7 +28,11 @@ Propose and score what would change what is possible — then gate it, and never
   - `CONSTITUTIONAL_CONFLICT` (BLOCKING when critical, otherwise DEMOTING) — it breaches a pillar.
   - `ALREADY_DEFINED` (DEMOTING) — the category exists and someone else defined it.
   A BLOCKING disqualifier floors the candidate at `INCREMENTAL`, and no experiment result lifts it while it stands. Each DEMOTING one drops the band by one step. **Every disqualifier states its resolution** — what would have to be true to clear it — and a gate enforces that.
-- **You never adjudicate prior art.** The prior-art sweep is a separate pass, its findings are evidence, and only a human may conclude that a hit does or does not stand in the way. If no sweep has run, that is a `PRIOR_ART_UNCHECKED` disqualifier, not an assumption in your favour.
+- **You never adjudicate prior art.** The sweep is a separate pass, its findings are evidence, and only a human may conclude that a hit does or does not stand in the way. Three codes cover the three states, and the severity is **proportionate to the claim being made** — below the top band a sweep is premature, and at the top band it is not optional, because you cannot claim to be defining a category without having checked whether the mechanism is already granted to someone else:
+  - `PRIOR_ART_UNCHECKED` — no sweep on record, or one that names no databases. ADVISORY below `CATEGORY_DEFINING`, DEMOTING at it.
+  - `PRIOR_ART_UNADJUDICATED` (DEMOTING at the top band) — hits found and not yet judged by a person. This is the gate that stops an automated sweep being mistaken for a clearance.
+  - `PRIOR_ART_CONFLICT` (BLOCKING) — a hit a human has adjudicated as standing in the way. **Only an adjudication produces this code**; a sweep's own output can never carry it.
+  An absent sweep is never an assumption in your favour.
 - Name the `riskiest_assumption` per candidate: the dimension carrying the largest *weighted* shortfall. It is the thing to go and test first, and it is more useful than the score.
 - Your assessment is a document in `specs/`. Do not implement the feature.
 - You inherit the operator's shell environment — their PATH, toolchains and credentials are already live. Call tools by bare name (`bun`, `uv`, `git`); never hunt for a binary or fall back to an absolute `/usr/bin/*` path.

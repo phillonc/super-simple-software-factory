@@ -45,6 +45,33 @@ It is **not** a client for the running UCAF service. Nothing here calls port 810
 If you want the TypeScript agents themselves, use their HTTP surface; this roster is
 for doing UCAF-shaped work on a codebase.
 
+### The upstream copy, and how it drifts
+
+That verbatim copy is a coupling with no mechanism behind it. There is no shared
+package, no codegen, no test spanning both repos — two languages in two
+repositories that happen to agree today.
+
+| Here (`adw_modules/data_types.py`) | Upstream (`lhs-agents/agents/ucaf-agent-system/`) |
+|---|---|
+| `UCAF_REASONING_STRATEGIES` | `ReasoningStrategy` enum in `types/index.ts` |
+| `UCAF_MEMORY_TYPES` | `MemoryType` enum |
+| `UCAF_ALIGNMENT_DIMENSIONS` / `_WEIGHTS` | DAVS dimensions + `DIMENSION_WEIGHTS` |
+| `UCAF_CONSTITUTIONAL_PILLARS` | `ConstitutionalPillarType` |
+| `CDF_DIMENSIONS` | `CATEGORY_DIMENSIONS` |
+| `CDF_BANDS` / `CDF_BAND_THRESHOLDS` | `CATEGORY_BANDS` / `CATEGORY_BAND_THRESHOLDS` |
+| the codes in `category_feature_architect/system.md` | `DisqualifierCode` + severities |
+
+**Drift is silent and it is asymmetric.** A strategy renamed upstream still parses
+here, and `gates.strategy_is_known` goes on accepting the old name indefinitely —
+green, and quietly measuring something upstream stopped believing in. The same is
+true of a reweighted dimension: `all_dimensions_scored` would keep recomputing the
+total against the old weights and keep passing. Nothing fails loudly, which is why
+this is written down rather than left to be noticed.
+
+Upstream carries the other half of this warning in `UCAF-TASK-COMPOSITION.md` §11
+("The second copy of the vocabulary"). If you change a name or a number in either
+place, the other table is the checklist.
+
 ---
 
 ## The roster
