@@ -21,8 +21,8 @@ cd /path/to/your/project
 uv run /path/to/skill/.claude/skills/sssf/scripts/install.py
 ```
 
-Stamps 66 files: `adws/` (modules + 15 ADWs), the 13 agent prompt directories,
-three rosters, `.env.sample`, a `justfile`, and `.gitignore` entries.
+Stamps 89 files: `adws/` (modules + 17 ADWs), the 23 agent prompt directories,
+four rosters, `.env.sample`, a `justfile`, and `.gitignore` entries.
 
 Before the first real run, wire the test command — `adws/adw_modules/quality.py`
 ships every check as a placeholder `echo` that admits it is fake:
@@ -39,6 +39,11 @@ Then pick a roster:
 | `adws/adw_sssf_config/sssf.config.yaml` | pi | `pi` on PATH |
 | `adws/adw_sssf_config/sssf.config.dsdm.yaml` | pi | `pi` on PATH |
 | `adws/adw_sssf_config/sssf.config.dsdm.cc.yaml` | claude_code | `claude` on PATH |
+| `adws/adw_sssf_config/sssf.config.ucaf.yaml` | pi | `pi` on PATH |
+
+The UCAF roster is a later addition and is documented on its own, in
+`.claude/skills/sssf/cookbooks/ucaf.md`. Everything below this line describes the
+DSDM work.
 
 The two DSDM rosters are the same eight agents, prompts and `writes:` boundaries.
 Only `coding_agent:` and the model ids differ. Examples below use the Claude Code

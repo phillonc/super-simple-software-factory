@@ -8,9 +8,10 @@ Usage:
     uv run <skill>/scripts/install.py [--force]
 
 Stamps: adws/ (modules + starter ADWs), adws/adw_data/prompt_engineering/
-(4 starter agents + the 8 DSDM agents), adws/adw_sssf_config/sssf.config.yaml
-sssf.config.dsdm.yaml and sssf.config.dsdm.cc.yaml, .env.sample, .gitignore entries.
-Existing files are skipped unless --force.
+(4 starter agents + the 8 DSDM agents + the 9 UCAF agents),
+adws/adw_sssf_config/sssf.config.yaml, sssf.config.dsdm.yaml,
+sssf.config.dsdm.cc.yaml and sssf.config.ucaf.yaml, .env.sample,
+.gitignore entries. Existing files are skipped unless --force.
 """
 
 import argparse
@@ -86,6 +87,13 @@ def main() -> int:
     # run depends on whether `pi` or `claude` is installed, not on the workflow.
     stamp(TEMPLATES / "sssf.config.dsdm.cc.yaml",
           root / "adws" / "adw_sssf_config" / "sssf.config.dsdm.cc.yaml",
+          args.force, stamped, skipped)
+    # The UCAF roster — the same modules again, staffed as a cognitive chain
+    # rather than a delivery one. Ships alongside the others for the same reason
+    # they ship alongside each other: `--config` picks the roster, so a repo can
+    # hold all three without any of them being the "other" install.
+    stamp(TEMPLATES / "sssf.config.ucaf.yaml",
+          root / "adws" / "adw_sssf_config" / "sssf.config.ucaf.yaml",
           args.force, stamped, skipped)
     stamp(TEMPLATES / "env.sample", root / ".env.sample", args.force, stamped, skipped)
     # The recipes are part of the operating experience, and several cookbooks

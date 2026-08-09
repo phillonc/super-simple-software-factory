@@ -1,0 +1,306 @@
+# sssf.config.ucaf.yaml — the UCAF roster. One agent, one prompt, one purpose.
+#
+# The Universal Cognitive Agent Framework's seven agents, staffed as an SSSF
+# roster. Ported from `lhs-agents/agents/ucaf-agent-system/`, where the same
+# seven run as TypeScript services behind a `UCAFPrimaryAgent`. Run it with
+# --config, or SSSF_CONFIG for the justfile:
+#
+#     uv run adws/adw_ucaf_cognitive.py "<request>" --config adws/adw_sssf_config/sssf.config.ucaf.yaml
+#     uv run adws/adw_ucaf_category.py  "<idea>"    --config adws/adw_sssf_config/sssf.config.ucaf.yaml
+#
+# ── What this roster is, and what it is not ──────────────────────────────────
+#
+# It is the UCAF cognitive model expressed as prompts and gates over this
+# factory's machinery. The agents share UCAF's vocabulary exactly — the eight
+# reasoning strategies, the six memory types, the five ethical dimensions, the
+# seven constitutional pillars, the eight category dimensions and their bands —
+# because a hand-run analysis here and a programmatic one in lhs-agents have to
+# reach the same verdict, and they cannot if the two disagree about what things
+# are called. Those lists live in `adw_modules/data_types.py`, not in a prompt,
+# so a gate and an agent read the same one.
+#
+# It is NOT a client for the running UCAF service. Nothing here calls port 8100.
+# If you want the TypeScript agents themselves, use their HTTP surface directly;
+# this roster is for doing UCAF-shaped work on a codebase.
+#
+# ── Two couplings worth knowing before you edit ──────────────────────────────
+#
+#   ARA reads DMA and CIS.       In UCAF this is `connectAgents(...)`, the only
+#                                direct agent-to-agent wiring in the system.
+#                                Here it is the chain: reasoning_architect runs
+#                                third, handed the recall and the capabilities.
+#
+#   DAVS gates, it does not      alignment_gatekeeper is the only agent whose
+#   advise.                      verdict stops a run. `writes: []` is doing real
+#                                work: a gatekeeper that can edit the thing it
+#                                is judging is not a gate.
+#
+# ── Who is NOT in this roster, and why ───────────────────────────────────────
+#
+#   The message bus     ABSENT. UCAF implements and tests an `AgentMessageBus`
+#                       that no agent binds to. Porting an unused seam would
+#                       make this roster claim a coupling neither system has.
+#
+#   Prior-art clearance HUMAN. `category_feature_architect` may search the IP
+#                       databases and report hits; it may never conclude the way
+#                       is clear. `PriorArtOutput.blocking` is `Literal[False]`,
+#                       `gates.prior_art_is_not_a_clearance` says so again, and
+#                       adw_ucaf_category.py ends at a human adjudication.
+#
+#   The 11-phase loop   PARTLY. UCAF's `UCAFRalphOrchestrator` sweeps eleven
+#   as a schedule       phases across the five STANDING agents. ERA and CDFA sit
+#                       it out there and sit it out here: both are episodic, and
+#                       running an episodic agent on a schedule runs it against
+#                       inputs nobody supplied. They have their own ADW instead.
+
+defaults:
+  coding_agent: pi
+  model: google/gemini-3.6-flash   # provider/id — a bare pattern is ambiguous across providers
+  thinking: medium                 # off | minimal | low | medium | high | xhigh | max
+  harness_engineering: []
+  tools:
+    - read                         # read file contents
+    - bash                         # execute bash commands
+    - edit                         # find/replace edits
+    - write                        # create/overwrite files
+    - grep                         # search file contents  (pi default: OFF)
+    - find                         # find files by glob     (pi default: OFF)
+    - ls                           # list directories       (pi default: OFF)
+  # Off-limits to every agent that does not name them in its own `writes`.
+  protected_files:
+    - adws/adw_modules/
+    - adws/adw_sssf_config/
+    - adws/adw_*.py
+    # The human decision record — including every prior-art adjudication this
+    # roster produces. It lives in the REPO rather than under data_dir because
+    # the session runtime is writable by every agent by design, and an
+    # adjudication that an agent could rewrite is not an adjudication.
+    - adws/adw_decisions/
+  data_dir: adws/adw_data          # runtime home: {data_dir}/sessions/{adw_id}/{agent_name}/
+
+observability:
+  db: adws/adw_data/sssf.db        # tracer writes here directly; the UI polls it
+  poll_ms: 500
+
+agents:
+  # ── The standing cognitive loop (DMA · CIS · ARA · DAVS · IES) ─────────────
+
+  - name: memory_architect
+    color: "#60a5fa"
+    purpose: Recall what is already known about this goal, and name what nothing answers.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/memory_architect/system.md
+      user: adws/adw_data/prompt_engineering/memory_architect/user.md
+    writes: []                     # read-only. DMA's other half — consolidation —
+                                   # is `memory_consolidator` below, precisely so
+                                   # recall does not have to carry write access
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: capability_specialist
+    color: "#34d399"
+    purpose: Report what this codebase can actually do, whether it works, and in what order it composes.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/capability_specialist/system.md
+      user: adws/adw_data/prompt_engineering/capability_specialist/user.md
+    writes: []                     # read-only: a capability report is a finding,
+                                   # and an agent that can install what it could
+                                   # not find is not reporting, it is changing
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: reasoning_architect
+    model: fireworks/accounts/fireworks/models/kimi-k3
+    thinking: high
+    color: "#a78bfa"
+    purpose: Draw what follows from the goal and the evidence, by a named strategy, and say what it will not claim.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/reasoning_architect/system.md
+      user: adws/adw_data/prompt_engineering/reasoning_architect/user.md
+    writes: []                     # inference is not implementation. ARA proposes;
+                                   # a builder in another roster disposes
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: self_corrector
+    model: openai/gpt-5.6-terra
+    thinking: high
+    color: "#f97316"
+    purpose: Audit the reasoning for contradiction, drift and unearned confidence, and correct what it finds.
+    # A separate agent rather than a second pass by the reasoning_architect, and
+    # deliberately on a different model: an agent re-reading its own work in the
+    # same session agrees with itself. UCAF's Ralph loop has SELF_CORRECTION as
+    # its own phase for the same reason.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/self_corrector/system.md
+      user: adws/adw_data/prompt_engineering/self_corrector/user.md
+    writes: []                     # it corrects the reasoning, not the repo
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: alignment_gatekeeper
+    model: openai/gpt-5.6-terra
+    thinking: high
+    color: "#f43f5e"
+    purpose: Rule on whether this should be done at all, across five dimensions and seven pillars.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/alignment_gatekeeper/system.md
+      user: adws/adw_data/prompt_engineering/alignment_gatekeeper/user.md
+    writes: []                     # the one verdict in this roster that stops a
+                                   # run, held by the one agent that may change
+                                   # nothing. A gate that can edit is not a gate.
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: interaction_specialist
+    color: "#fbbf24"
+    purpose: Map how people actually move through this, and where it costs them.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/interaction_specialist/system.md
+      user: adws/adw_data/prompt_engineering/interaction_specialist/user.md
+    writes: []                     # observational
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  # ── The episodic pair (ERA · CDFA) ─────────────────────────────────────────
+  #
+  # Two halves of the same instinct pointed in opposite directions: ERA finds
+  # the pattern nobody predicted, CDFA proposes the mechanism nobody has built.
+  # A friction ERA surfaces is exactly what CDFA consumes, which is why
+  # adw_ucaf_category.py runs them in that order — the hand-off is manual in
+  # UCAF itself, and making it a chain is the one thing this roster adds.
+
+  - name: emergence_researcher
+    model: openai/gpt-5.6-luna
+    thinking: high
+    color: "#22d3ee"
+    purpose: Find what this system is doing that nobody designed it to do; contain nothing quietly.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/emergence_researcher/system.md
+      user: adws/adw_data/prompt_engineering/emergence_researcher/user.md
+    writes: []                     # observational, and backward-looking
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: category_feature_architect
+    model: fireworks/accounts/fireworks/models/kimi-k3
+    thinking: high
+    color: "#e879f9"
+    purpose: Propose and score what would change what is possible — then gate it, and never clear it.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/category_feature_architect/system.md
+      user: adws/adw_data/prompt_engineering/category_feature_architect/user.md
+    writes:                        # the assessment is a document, not a change
+      - specs/
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  - name: prior_art_searcher
+    color: "#94a3b8"
+    purpose: Report what the IP databases already hold, and what they could not reach. Never clear anything.
+    # Split from category_feature_architect rather than run as a second task by
+    # it, and not only because one agent means one prompt. The architect has an
+    # interest in its own candidate; the searcher must not. Separating them puts
+    # the sweep on its own model, its own session, and its own boundary
+    # (`writes: []`), so the evidence that could sink a candidate is not gathered
+    # by the agent that proposed it.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/prior_art_searcher/system.md
+      user: adws/adw_data/prompt_engineering/prior_art_searcher/user.md
+    writes: []                     # evidence only, and evidence is not a change
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash                       # curl against EPO OPS / Lens.org / TMview
+      - write
+
+  # ── The boundary between the agents and the people ─────────────────────────
+
+  - name: workshop_facilitator
+    model: openai/gpt-5.6-terra
+    thinking: high
+    color: "#f472b6"
+    purpose: Frame the decision a human is about to take, and never take it.
+    # Shared verbatim with the DSDM roster — same prompts, same `writes: []`,
+    # same gate. Deliberate reuse rather than a UCAF-flavoured copy: framing a
+    # decision without taking it is not a DSDM skill, and two prompts that must
+    # never diverge should not be two files.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/workshop_facilitator/system.md
+      user: adws/adw_data/prompt_engineering/workshop_facilitator/user.md
+    writes: []                     # read-only, and pointedly so: the agent that
+                                   # prepares a human decision has no way to
+                                   # write the record of one
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+
+  # ── Memory consolidation ───────────────────────────────────────────────────
+
+  - name: memory_consolidator
+    color: "#818cf8"
+    purpose: Commit what this run learned to memory, and retire what it supersedes.
+    # DMA's other half. Split from memory_architect because the two phases sit at
+    # opposite ends of a run with opposite boundaries: recall reads and writes
+    # nothing, consolidation writes the one durable artifact the chain leaves
+    # behind. One agent holding both would need the union of their permissions
+    # for the whole run, which would make the read-only recall phase writable.
+    prompt_engineering:
+      system: adws/adw_data/prompt_engineering/memory_consolidator/system.md
+      user: adws/adw_data/prompt_engineering/memory_consolidator/user.md
+    writes:
+      - app_docs/                  # the run's durable memory, next to the code
+    tools:
+      - read
+      - grep
+      - find
+      - ls
+      - bash
+      - write
+      - edit
