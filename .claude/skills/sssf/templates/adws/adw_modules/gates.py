@@ -15,7 +15,10 @@ import subprocess
 from pathlib import Path
 
 from . import git_helper
-from .data_types import DSDM_PRINCIPLES, EnvelopeBase, GateReport
+from .data_types import (CDF_BAND_THRESHOLDS, CDF_BANDS, CDF_DIMENSIONS, DSDM_PRINCIPLES,
+                         UCAF_ALIGNMENT_DIMENSIONS, UCAF_ALIGNMENT_WEIGHTS,
+                         UCAF_CONSTITUTIONAL_PILLARS, UCAF_REASONING_STRATEGIES,
+                         EnvelopeBase, GateReport)
 
 TAIL_CHARS = 1000        # command output kept as evidence on a failure
 
@@ -318,6 +321,279 @@ def all_principles_ruled(envelope: EnvelopeBase, run) -> GateReport:
             report.check(f"{f.principle} corrective action", bool(f.corrective_action.strip()),
                          "breach reported with no corrective action"
                          if not f.corrective_action.strip() else "stated")
+    return report
+
+
+# ── UCAF gates ───────────────────────────────────────────────────────────────
+#
+# UCAF's claims are the kind that sound strongest exactly when they are least
+# checked: a named reasoning strategy, a confidence figure, an ethical review, a
+# prior-art sweep. Each gate below turns one of those into something the harness
+# can refute without believing the agent.
+
+# Above this, a claim is asserting near-certainty and has to cite something.
+CONFIDENCE_NEEDS_EVIDENCE = 0.70
+
+# A weighted alignment score below this is not compliant, whatever the envelope
+# says. UCAF's own threshold, restated here so the gate does not have to trust
+# the agent's arithmetic OR its judgement.
+MIN_ALIGNMENT_SCORE = 60.0
+
+
+def strategy_is_known(envelope: EnvelopeBase, run) -> GateReport:
+    """Every inference names one of UCAF's eight strategies, verbatim.
+
+    The list is closed. An agent that invents a ninth is not reasoning in a way
+    anyone can audit — it is giving an ordinary guess a principled-sounding
+    name, which is the failure this gate exists to make impossible.
+    """
+    report = GateReport()
+    inferences = list(getattr(envelope, "inferences", []))
+    if not inferences:
+        return report.check("inferences", False, "no inference was drawn")
+    for inf in inferences:
+        known = inf.strategy in UCAF_REASONING_STRATEGIES
+        report.check(f"{inf.id} strategy", known,
+                     f"{inf.strategy!r} is not a UCAF strategy — one of "
+                     f"{', '.join(UCAF_REASONING_STRATEGIES)}" if not known
+                     else inf.strategy)
+    return report
+
+
+def inferences_are_evidenced(envelope: EnvelopeBase, run) -> GateReport:
+    """A confident claim cites something; a derived one names what it came from.
+
+    Confidence is cheap to type. This gate makes it expensive above
+    CONFIDENCE_NEEDS_EVIDENCE, and checks that hypothesis ids an inference
+    claims to rest on are hypotheses this envelope actually raised.
+    """
+    report = GateReport()
+    hypotheses = list(getattr(envelope, "hypotheses", []))
+    known_ids = {h.id for h in hypotheses}
+
+    for h in hypotheses:
+        in_range = 0.0 <= h.confidence <= 1.0
+        report.check(f"{h.id} confidence", in_range,
+                     f"{h.confidence} is outside 0-1" if not in_range else f"{h.confidence}")
+        if h.confidence >= CONFIDENCE_NEEDS_EVIDENCE:
+            report.check(f"{h.id} evidence", bool(h.evidence),
+                         f"confidence {h.confidence} with no evidence — cite a "
+                         f"file:line, a command, or lower the confidence"
+                         if not h.evidence else f"{len(h.evidence)} citation(s)")
+
+    for inf in getattr(envelope, "inferences", []):
+        unknown = [h for h in inf.from_hypotheses if h not in known_ids]
+        report.check(f"{inf.id} provenance", not unknown,
+                     f"rests on hypotheses this envelope never raised: "
+                     f"{', '.join(unknown)}" if unknown else "traceable")
+        if inf.confidence >= CONFIDENCE_NEEDS_EVIDENCE:
+            report.check(f"{inf.id} evidence", bool(inf.evidence or inf.from_hypotheses),
+                         f"confidence {inf.confidence} resting on nothing"
+                         if not (inf.evidence or inf.from_hypotheses) else "supported")
+    return report
+
+
+def corrections_applied(envelope: EnvelopeBase, run) -> GateReport:
+    """A self-correction pass that found something must have done something.
+
+    Detecting an issue and leaving it standing is worse than not looking: the
+    run now carries a written record saying the reasoning was checked. `clean`
+    is arithmetic over `issues`, so an agent cannot declare itself clean and
+    list a contradiction in the same breath.
+    """
+    report = GateReport()
+    issues = list(getattr(envelope, "issues", []))
+    clean = bool(getattr(envelope, "clean", False))
+    uncorrected = [i for i in issues if not i.correction.strip()]
+
+    report.check("clean vs issues", not (clean and issues),
+                 f"clean=true while reporting {len(issues)} issue(s)"
+                 if clean and issues else
+                 "no issues found" if clean else f"{len(issues)} issue(s) reported")
+    report.check("issues corrected", not uncorrected,
+                 f"detected and left standing: {', '.join(i.kind for i in uncorrected)}"
+                 if uncorrected else "every issue carries a correction")
+    return report
+
+
+def all_dimensions_scored(envelope: EnvelopeBase, run) -> GateReport:
+    """DAVS rules on all five dimensions, and the weighted score is the weights.
+
+    A partial ethical review reads exactly like a clean one, which is why the
+    full set is required rather than encouraged. The weighted score is
+    recomputed here from UCAF's published weights: an agent that scores five
+    dimensions honestly and then reports a total it likes better is caught by
+    arithmetic rather than by a reviewer noticing.
+    """
+    report = GateReport()
+    scores = list(getattr(envelope, "scores", []))
+    by_dimension = {s.dimension: s for s in scores}
+
+    for dimension in UCAF_ALIGNMENT_DIMENSIONS:
+        report.check(dimension, dimension in by_dimension,
+                     "not scored" if dimension not in by_dimension
+                     else f"{by_dimension[dimension].score}")
+    unknown = sorted(set(by_dimension) - set(UCAF_ALIGNMENT_DIMENSIONS))
+    report.check("dimension names", not unknown,
+                 f"not UCAF dimensions: {', '.join(unknown)}" if unknown else "all five, named")
+
+    if len(by_dimension) == len(UCAF_ALIGNMENT_DIMENSIONS):
+        expected = sum(by_dimension[d].score * UCAF_ALIGNMENT_WEIGHTS[d]
+                       for d in UCAF_ALIGNMENT_DIMENSIONS)
+        claimed = float(getattr(envelope, "weighted_score", 0.0))
+        report.check("weighted score", abs(expected - claimed) <= 0.5,
+                     f"reported {claimed:.1f}, the published weights give "
+                     f"{expected:.1f}" if abs(expected - claimed) > 0.5
+                     else f"{claimed:.1f}, matches the weights")
+    return report
+
+
+def alignment_verdict_consistent(envelope: EnvelopeBase, run) -> GateReport:
+    """`compliant` must agree with the breaches and the score beside it.
+
+    This is the gate the cognitive chain hangs on: DAVS is the only agent whose
+    verdict stops a run, so its verdict is the one most worth being unable to
+    fudge. Nothing here judges ethics — it checks the envelope against itself.
+    """
+    report = GateReport()
+    compliant = bool(getattr(envelope, "compliant", False))
+    breaches = list(getattr(envelope, "breaches", []))
+    critical = [b for b in breaches if b.severity in ("high", "critical")]
+    score = float(getattr(envelope, "weighted_score", 0.0))
+
+    report.check("compliant vs breaches", not (compliant and critical),
+                 f"compliant=true with {len(critical)} high/critical breach(es): "
+                 f"{', '.join(b.pillar for b in critical)}" if compliant and critical
+                 else f"{len(critical)} high/critical breach(es)" if critical
+                 else "no serious breach")
+    report.check("compliant vs score", not (compliant and score < MIN_ALIGNMENT_SCORE),
+                 f"compliant=true at {score:.1f}, below the {MIN_ALIGNMENT_SCORE:.0f} "
+                 f"floor" if compliant and score < MIN_ALIGNMENT_SCORE
+                 else f"{score:.1f}")
+    report.check("newspaper test",
+                 bool(str(getattr(envelope, "newspaper_test", "")).strip()),
+                 "the Dual Newspaper Test was not applied — say how this reads "
+                 "reported as a scandal AND reported as excessive caution"
+                 if not str(getattr(envelope, "newspaper_test", "")).strip() else "applied")
+
+    unknown = sorted({b.pillar for b in breaches} - set(UCAF_CONSTITUTIONAL_PILLARS))
+    report.check("pillar names", not unknown,
+                 f"not constitutional pillars: {', '.join(unknown)}" if unknown
+                 else "named from the canonical seven")
+    for b in critical:
+        report.check(f"{b.pillar} remedy", bool(b.remedy.strip()),
+                     f"{b.severity} breach with no remedy" if not b.remedy.strip() else "stated")
+    return report
+
+
+def risks_are_contained(envelope: EnvelopeBase, run) -> GateReport:
+    """A pattern ERA classified as a risk names its containment.
+
+    ERA is observational — it does not fix what it finds. But a risk reported
+    with no containment is a note, and the point of detecting emergent behaviour
+    is that somebody can act on it before it compounds.
+    """
+    report = GateReport()
+    patterns = list(getattr(envelope, "patterns", []))
+    if not patterns:
+        return report.check("patterns", True,
+                            "no emergent pattern detected — a legitimate finding")
+    for p in patterns:
+        in_range = 0.0 <= p.novelty <= 1.0
+        report.check(f"{p.id} novelty", in_range,
+                     f"{p.novelty} is outside 0-1" if not in_range else f"{p.novelty}")
+        report.check(f"{p.id} evidence", bool(p.evidence),
+                     "classified with no evidence" if not p.evidence
+                     else f"{len(p.evidence)} citation(s)")
+        if p.classification == "risk":
+            report.check(f"{p.id} containment", bool(p.containment.strip()),
+                         "classified a risk with no containment"
+                         if not p.containment.strip() else "stated")
+    return report
+
+
+def gates_not_bypassed(envelope: EnvelopeBase, run) -> GateReport:
+    """A candidate's band respects its own scores and its own disqualifiers.
+
+    CDFA's whole claim is that a well-told story cannot talk its way into the
+    top band, and that claim rests on gates being non-bypassable. So the band is
+    recomputed here from the composite score and then walked down by the
+    disqualifiers the agent itself declared: a BLOCKING one floors the candidate
+    at INCREMENTAL, a DEMOTING one drops it a band. An agent that scores
+    honestly and bands generously is caught by the same arithmetic UCAF uses.
+    """
+    report = GateReport()
+    candidates = list(getattr(envelope, "candidates", []))
+    if not candidates:
+        return report.check("candidates", False, "no candidate was assessed")
+
+    for c in candidates:
+        scored = {s.dimension for s in c.scores}
+        missing = [d for d in CDF_DIMENSIONS if d not in scored]
+        report.check(f"{c.name} dimensions", not missing,
+                     f"not scored: {', '.join(missing)}" if missing
+                     else f"all {len(CDF_DIMENSIONS)} scored")
+
+        raw = max((b for b in CDF_BANDS if c.composite >= CDF_BAND_THRESHOLDS[b]),
+                  key=CDF_BANDS.index, default="INCREMENTAL")
+        report.check(f"{c.name} raw band", c.band_before_gates == raw,
+                     f"composite {c.composite} is {raw}, not "
+                     f"{c.band_before_gates}" if c.band_before_gates != raw else raw)
+
+        severities = {d.severity for d in c.disqualifiers}
+        if "BLOCKING" in severities:
+            ceiling = "INCREMENTAL"
+        else:
+            demotions = sum(1 for d in c.disqualifiers if d.severity == "DEMOTING")
+            ceiling = CDF_BANDS[max(0, CDF_BANDS.index(raw) - demotions)]
+        held = CDF_BANDS.index(c.band) <= CDF_BANDS.index(ceiling)
+        report.check(f"{c.name} band after gates", held,
+                     f"banded {c.band}; its own disqualifiers cap it at {ceiling}"
+                     if not held else f"{c.band}, within {ceiling}")
+
+        for d in c.disqualifiers:
+            report.check(f"{c.name}/{d.code} resolution", bool(d.resolution.strip()),
+                         "no resolution — say what would have to be true to clear it"
+                         if not d.resolution.strip() else "stated")
+    return report
+
+
+def prior_art_is_not_a_clearance(envelope: EnvelopeBase, run) -> GateReport:
+    """A prior-art sweep reports what it found and what it could not reach.
+
+    The invariant UCAF pins in its adapters, restated where this roster can
+    enforce it: an automated search must never read as a freedom-to-operate
+    opinion. The databases are partial, publication lags filing by up to
+    eighteen months, and only a qualified human adjudication decides whether a
+    hit stands in the way. So `blocking` stays false, the human is always
+    required, and a sweep that names no coverage gap has not understood what it
+    just did — every one of these searches has gaps, and saying so is the
+    difference between evidence and a clearance.
+    """
+    report = GateReport()
+    report.check("not blocking", getattr(envelope, "blocking", False) is False,
+                 "a prior-art search set blocking=true — only a human "
+                 "adjudication may block a candidate")
+    report.check("human adjudication required",
+                 getattr(envelope, "requires_human_adjudication", False) is True,
+                 "the sweep does not require adjudication — an automated search "
+                 "is evidence, never a clearance")
+    databases = list(getattr(envelope, "databases_searched", []))
+    report.check("databases named", bool(databases),
+                 "no database named — an unsourced search cannot be reproduced"
+                 if not databases else ", ".join(databases))
+    report.check("queries recorded", bool(getattr(envelope, "queries", [])),
+                 "no query recorded — nobody can rerun or widen this search"
+                 if not getattr(envelope, "queries", []) else "recorded")
+    report.check("coverage gaps stated", bool(getattr(envelope, "coverage_gaps", [])),
+                 "no coverage gap stated — every search of these databases has "
+                 "them (unpublished filings, non-participating offices, "
+                 "non-patent literature); silence here reads as a clearance"
+                 if not getattr(envelope, "coverage_gaps", []) else "stated")
+    for hit in getattr(envelope, "hits", []):
+        report.check(f"{hit.database} {hit.identifier}", bool(hit.relevance.strip()),
+                     "hit reported with no stated relevance"
+                     if not hit.relevance.strip() else hit.relevance[:60])
     return report
 
 

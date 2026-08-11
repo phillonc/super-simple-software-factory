@@ -80,6 +80,25 @@ timebox *ARGS:
 coach ADW_ID:
     uv run adws/adw_dsdm_coach.py {{ADW_ID}} --config {{dsdm_config}}
 
+# ── UCAF: the cognitive chain, and the episodic pair ────────────────────────
+# Same modules, staffed as cognition rather than delivery. Nothing here builds:
+# the cognitive chain leaves one document in app_docs/, the category chain one in
+# specs/ — and only after a human adjudicates the prior art.
+
+ucaf_config := env_var_or_default("SSSF_UCAF_CONFIG", "adws/adw_sssf_config/sssf.config.ucaf.yaml")
+
+# recall, reason, self-correct, then the alignment gate: just ucaf "why does the queue drop jobs?"
+ucaf *ARGS:
+    uv run adws/adw_ucaf_cognitive.py --config {{ucaf_config}} "$@"
+
+# the same, plus the IES journey pass — only for goals with a human journey in them
+ucaf-journey *ARGS:
+    uv run adws/adw_ucaf_cognitive.py --config {{ucaf_config}} --journey "$@"
+
+# score an idea on 8 dimensions, sweep prior art, then YOU adjudicate: just category "let buyers underwrite unlisted stock"
+category *ARGS:
+    uv run adws/adw_ucaf_category.py --config {{ucaf_config}} "$@"
+
 # every decision a human took, newest first
 decisions:
     @sqlite3 {{db}} "select adw_id, json_extract(payload_json,'$.checkpoint'), json_extract(payload_json,'$.verdict'), json_extract(payload_json,'$.decided_by'), json_extract(payload_json,'$.source') from events where type='log' and name='human_decision' order by rowid desc limit 20;"

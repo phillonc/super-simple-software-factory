@@ -1,6 +1,6 @@
 ---
 name: sssf
-description: Super Simple Software Factory — deploy and operate repeatable agents+code workflows (ADWs) in any codebase. Use when the user says /sssf install, wants to create/run/update an ADW, manage the agent roster in sssf.config.yaml, or observe running agent workflows. Keywords - sssf, software factory, ADW, AI developer workflow, agent pipeline, install factory.
+description: Super Simple Software Factory — deploy and operate repeatable agents+code workflows (ADWs) in any codebase. Use when the user says /sssf install, wants to create/run/update an ADW, manage the agent roster in sssf.config.yaml, or observe running agent workflows. Keywords - sssf, software factory, ADW, AI developer workflow, agent pipeline, install factory, DSDM roster, UCAF roster, cognitive chain, alignment gate, category-defining feature, prior art.
 argument-hint: "[install | create adw | run adw | update config | ...]"
 ---
 
@@ -23,6 +23,8 @@ Three steps. Then stop.
 | adw_simple_sdlc | plan → build → test → review → document, 3 commits | the work is real and its shape is not obvious |
 | adw_dsdm_foundations | requirements → constraints → architecture → pack → YOU decide | the work needs agreeing before it needs building |
 | adw_dsdm_timebox | investigate → build/test/accept (bounded) → pack → YOU decide | one fixed-length box against agreed foundations |
+| adw_ucaf_cognitive | recall → capabilities → reason → self-correct → align → consolidate | the question is what is TRUE here, and whether acting on it is right |
+| adw_ucaf_category | emergence → score+gate → prior art → pack → YOU adjudicate | "is this category-defining?" — scored, gated, never self-cleared |
 ```
 
 **Nothing else.** No trace-db queries, no reading the config or the ADW scripts' bodies, no repo inventory, no last-runs summary, no diagnosing an old failure, no "current state" dashboard. None of it was asked for, and it is not free:
@@ -50,6 +52,7 @@ You run the system, observe the system, and help the user interact with it. **Yo
 |---|---|
 | `/sssf install`, set up the factory in this repo | [cookbooks/install.md](cookbooks/install.md) |
 | DSDM roster, human checkpoints, timeboxes, MoSCoW | [cookbooks/dsdm.md](cookbooks/dsdm.md) |
+| UCAF roster, cognition, alignment gate, category-defining features, prior art | [cookbooks/ucaf.md](cookbooks/ucaf.md) |
 | create a new ADW / workflow | [cookbooks/create_adw.md](cookbooks/create_adw.md) |
 | modify an existing ADW chain | [cookbooks/update_adw.md](cookbooks/update_adw.md) |
 | create the config / agent roster | [cookbooks/create_config.md](cookbooks/create_config.md) |

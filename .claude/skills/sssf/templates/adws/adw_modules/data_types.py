@@ -435,6 +435,323 @@ class CoachOutput(EnvelopeBase):
     breaches: list[str] = Field(default_factory=list)
 
 
+# ── UCAF: cognition, alignment, and category-defining features ───────────────
+#
+# The UCAF roster's envelopes, ported from the Universal Cognitive Agent
+# Framework in lhs-agents (`agents/ucaf-agent-system/`). The vocabulary is
+# copied deliberately rather than paraphrased: a hand-run analysis here and a
+# programmatic one there have to reach the same verdict, and they cannot if the
+# two disagree about what a strategy, a pillar, or a band is called.
+#
+# Four ideas carry every type below:
+#
+#   1. An inference names the strategy that produced it. UCAF has eight and
+#      exactly eight; `gates.strategy_is_known` refuses anything else, so an
+#      agent cannot invent a ninth to make a weak conclusion sound principled.
+#   2. Confidence without evidence is a mood. Every hypothesis and inference
+#      carries `evidence`, and the gate fails a high-confidence claim that
+#      cites nothing.
+#   3. Alignment is scored on all five dimensions or not at all. A partial
+#      ethical review reads exactly like a clean one.
+#   4. A prior-art search never clears anything. Only a human adjudication may
+#      block a candidate — the invariant the UCAF system pins in its adapters,
+#      pinned here by the type (`PriorArtOutput.blocking` is `Literal[False]`)
+#      and again by `gates.prior_art_is_not_a_clearance`.
+
+# The eight reasoning strategies, verbatim from UCAF's `ReasoningStrategy` enum.
+UCAF_REASONING_STRATEGIES = [
+    "deductive",            # general to specific
+    "inductive",            # specific to general
+    "abductive",            # inference to the best explanation
+    "analogical",           # pattern transfer between domains
+    "causal",               # cause and effect
+    "probabilistic",        # Bayesian updating
+    "constraint_based",     # satisfaction under stated limits
+    "monte_carlo",          # sampled tree search
+]
+
+# DMA's six memory types. A recall that names none of these is not a recall.
+UCAF_MEMORY_TYPES = [
+    "episodic", "semantic", "procedural", "working", "long_term", "associative",
+]
+
+# DAVS's five weighted ethical dimensions, with UCAF's own weights. Named here
+# rather than in a prompt so the gate and the agent read the same list.
+UCAF_ALIGNMENT_DIMENSIONS = ["privacy", "transparency", "autonomy", "fairness", "beneficence"]
+UCAF_ALIGNMENT_WEIGHTS = {
+    "privacy": 0.25, "transparency": 0.20, "autonomy": 0.20,
+    "fairness": 0.20, "beneficence": 0.15,
+}
+
+# The seven constitutional pillars DAVS checks an action against.
+UCAF_CONSTITUTIONAL_PILLARS = [
+    "community_first", "economic_fairness", "radical_accessibility",
+    "uncompromising_trust", "responsible_innovation", "sustainable_growth",
+    "cultural_preservation",
+]
+
+# CDFA's eight weighted dimensions of category-defining-ness.
+CDF_DIMENSIONS = [
+    "latentSupplyUnlock", "demandAggregation", "frictionCollapse", "trustInfrastructure",
+    "compoundingFlywheel", "behaviourDefault", "moatDurability", "timingAlignment",
+]
+
+CategoryBand = Literal["INCREMENTAL", "DIFFERENTIATING", "CATEGORY_EXTENDING",
+                       "CATEGORY_DEFINING"]
+
+# Ordered weakest → strongest, so a demotion is an index shift.
+CDF_BANDS = ["INCREMENTAL", "DIFFERENTIATING", "CATEGORY_EXTENDING", "CATEGORY_DEFINING"]
+
+# Lower bound of the composite score for each band, from UCAF's published table.
+CDF_BAND_THRESHOLDS = {
+    "INCREMENTAL": 0, "DIFFERENTIATING": 45, "CATEGORY_EXTENDING": 62,
+    "CATEGORY_DEFINING": 78,
+}
+
+
+class MemoryRecall(BaseModel):
+    """One thing already known that bears on the goal."""
+
+    memory_type: Literal["episodic", "semantic", "procedural", "working",
+                         "long_term", "associative"]
+    content: str
+    source: str = ""                # file:line, a prior adw_id, or the document
+    relevance: float = 0.0          # 0-1, why this made the working set
+
+
+class ContextOutput(EnvelopeBase):
+    """DMA's answer to 'what do we already know?' — plus what we plainly do not."""
+
+    goal: str = ""
+    recalled: list[MemoryRecall] = Field(default_factory=list)
+    gaps: list[str] = Field(default_factory=list)   # what nothing in the repo answers
+
+
+class CapabilityRecord(BaseModel):
+    """One thing the system can actually do, and whether it works right now."""
+
+    capability_id: str
+    provider: str = ""              # the module, service or binary behind it
+    invocation: str = ""            # how it is called: a command, a route, a symbol
+    healthy: bool = False
+    evidence: str = ""              # what was checked to decide `healthy`
+
+
+class CapabilityOutput(EnvelopeBase):
+    """CIS's registry for this run: what is available, composed in what order."""
+
+    capabilities: list[CapabilityRecord] = Field(default_factory=list)
+    execution_order: list[str] = Field(default_factory=list)   # capability ids
+    unavailable: list[str] = Field(default_factory=list)       # named, wanted, missing
+
+
+class Hypothesis(BaseModel):
+    """A candidate explanation, held with a stated confidence."""
+
+    id: str                         # H-01
+    statement: str
+    confidence: float = 0.0         # 0-1
+    evidence: list[str] = Field(default_factory=list)   # file:line or command output
+    contradicted_by: list[str] = Field(default_factory=list)
+
+
+class Inference(BaseModel):
+    """One conclusion, and the named strategy that produced it."""
+
+    id: str                         # INF-01
+    conclusion: str
+    strategy: str                   # one of UCAF_REASONING_STRATEGIES, verbatim
+    from_hypotheses: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+    evidence: list[str] = Field(default_factory=list)
+
+
+class ReasoningOutput(EnvelopeBase):
+    """ARA's working: hypotheses raised, inferences drawn, what it would not claim."""
+
+    goal: str = ""
+    hypotheses: list[Hypothesis] = Field(default_factory=list)
+    inferences: list[Inference] = Field(default_factory=list)
+    uncertainty: float = 0.0        # 0-1, the agent's own read on how shaky this is
+    unresolved: list[str] = Field(default_factory=list)
+
+
+class ReasoningIssue(BaseModel):
+    """Something wrong with the reasoning, and what was done about it."""
+
+    kind: Literal["contradiction", "unevidenced_claim", "overconfidence",
+                  "goal_drift", "circular"]
+    detail: str
+    affects: list[str] = Field(default_factory=list)    # hypothesis/inference ids
+    correction: str = ""            # what changed; empty means it still stands
+
+
+class CorrectionOutput(EnvelopeBase):
+    """The Ralph loop's self-correction pass. Finding nothing is a valid answer.
+
+    `clean` is arithmetic over `issues`, not a mood — `gates.corrections_applied`
+    refuses a pass that declares itself clean while leaving an issue uncorrected.
+    """
+
+    issues: list[ReasoningIssue] = Field(default_factory=list)
+    clean: bool = False
+    revised_confidence: float = 0.0
+
+
+class AlignmentScore(BaseModel):
+    """One of DAVS's five dimensions, scored with a reason."""
+
+    dimension: Literal["privacy", "transparency", "autonomy", "fairness", "beneficence"]
+    score: float = 0.0              # 0-100
+    rationale: str = ""
+    concerns: list[str] = Field(default_factory=list)
+
+
+class PillarBreach(BaseModel):
+    """A constitutional pillar the proposed action does not honour."""
+
+    pillar: str                     # one of UCAF_CONSTITUTIONAL_PILLARS, verbatim
+    breach: str
+    severity: Literal["low", "medium", "high", "critical"] = "medium"
+    remedy: str = ""                # required whenever severity is high or critical
+
+
+class AlignmentOutput(EnvelopeBase):
+    """DAVS's answer to 'should we be doing this at all?'
+
+    The gatekeeper of the cognitive chain, and the only agent in the roster
+    whose verdict can stop a run. `compliant` has to agree with what it just
+    wrote down: `gates.alignment_verdict_consistent` refuses a pass that clears
+    an action while listing a critical breach against it.
+    """
+
+    action_reviewed: str = ""
+    scores: list[AlignmentScore] = Field(default_factory=list)
+    weighted_score: float = 0.0     # 0-100, the published weights applied
+    breaches: list[PillarBreach] = Field(default_factory=list)
+    # UCAF's Dual Newspaper Test: would this read badly reported as a scandal,
+    # AND would it read badly reported as excessive caution? Both, in one line.
+    newspaper_test: str = ""
+    compliant: bool = False
+
+
+class ConsolidationOutput(EnvelopeBase):
+    """What DMA committed to memory at the end of a run, and what it retired."""
+
+    stored: list[MemoryRecall] = Field(default_factory=list)
+    superseded: list[str] = Field(default_factory=list)   # what this run replaces
+    commit_message: str = ""
+
+
+class JourneyStep(BaseModel):
+    """One observed step a person takes, and what it costs them."""
+
+    step: str
+    channel: str = ""               # web | mobile | in-store | email | ...
+    friction: str = ""              # what makes this step harder than it should be
+    evidence: str = ""              # file:line, analytics, or the code path
+
+
+class InteractionOutput(EnvelopeBase):
+    """IES's read on how people actually move through this, not how it was designed."""
+
+    journey: list[JourneyStep] = Field(default_factory=list)
+    frictions: list[str] = Field(default_factory=list)  # the ones worth removing
+    opportunities: list[str] = Field(default_factory=list)
+
+
+class EmergentPattern(BaseModel):
+    """Something happening that nobody designed for."""
+
+    id: str                         # PAT-01
+    pattern: str
+    novelty: float = 0.0            # 0-1, how far outside the designed behaviour
+    classification: Literal["benign", "opportunity", "risk", "unknown"] = "unknown"
+    evidence: list[str] = Field(default_factory=list)
+    containment: str = ""           # required when classification is "risk"
+
+
+class EmergenceOutput(EnvelopeBase):
+    """ERA's sweep for the behaviour the design did not predict."""
+
+    patterns: list[EmergentPattern] = Field(default_factory=list)
+    baseline: str = ""              # what "designed for" was measured against
+
+
+class DimensionScore(BaseModel):
+    """One of CDFA's eight dimensions, scored 0-1 with its reason."""
+
+    dimension: str                  # one of CDF_DIMENSIONS, verbatim
+    score: float = 0.0              # 0-1
+    rationale: str = ""
+    evidence: list[str] = Field(default_factory=list)
+
+
+class Disqualifier(BaseModel):
+    """A gate the candidate failed. Non-bypassable by design.
+
+    A BLOCKING disqualifier is not waiting on evidence — no experiment result
+    lifts the verdict while it stands. DEMOTING drops the band by one; ADVISORY
+    is recorded and changes nothing.
+    """
+
+    code: str                       # NO_STRUCTURAL_UNLOCK, PRIOR_ART_CONFLICT, ...
+    severity: Literal["ADVISORY", "DEMOTING", "BLOCKING"]
+    detail: str
+    resolution: str = ""            # what would have to be true to clear it
+
+
+class CandidateAssessment(BaseModel):
+    """One proposed feature, scored, gated, and banded."""
+
+    name: str
+    mechanism: str = ""             # what it structurally makes possible that was not
+    scores: list[DimensionScore] = Field(default_factory=list)
+    composite: float = 0.0          # 0-100, the published weights applied
+    band_before_gates: CategoryBand = "INCREMENTAL"
+    band: CategoryBand = "INCREMENTAL"      # after gates; never above the raw band
+    disqualifiers: list[Disqualifier] = Field(default_factory=list)
+    riskiest_assumption: str = ""
+
+
+class CategoryAnalysisOutput(EnvelopeBase):
+    """CDFA's answer to 'what should we build that would change what is possible?'"""
+
+    candidates: list[CandidateAssessment] = Field(default_factory=list)
+    ranked: list[str] = Field(default_factory=list)     # candidate names, best first
+    commit_message: str = ""
+
+
+class PriorArtHit(BaseModel):
+    """One document a prior-art search surfaced. Evidence, never a verdict."""
+
+    database: str                   # EPO OPS | Lens.org | TMview
+    identifier: str                 # publication or application number, mark id
+    title: str = ""
+    relevance: str = ""             # why it might bear on the candidate
+    url: str = ""
+
+
+class PriorArtOutput(EnvelopeBase):
+    """A prior-art sweep: what was searched, what came back. Never a clearance.
+
+    `blocking` is `Literal[False]` on purpose, mirroring the UCAF invariant that
+    no prior-art adapter may ever set it. A sweep that could block would read as
+    a freedom-to-operate opinion, and this one is not: databases are partial,
+    coverage lags publication, and only a qualified human adjudication decides
+    whether a hit stands in the way. `gates.prior_art_is_not_a_clearance` says
+    the same thing a second time, in case someone widens the type.
+    """
+
+    candidate: str = ""
+    databases_searched: list[str] = Field(default_factory=list)
+    queries: list[str] = Field(default_factory=list)
+    hits: list[PriorArtHit] = Field(default_factory=list)
+    coverage_gaps: list[str] = Field(default_factory=list)  # what was NOT searched
+    blocking: Literal[False] = False
+    requires_human_adjudication: Literal[True] = True
+
+
 # ── Deterministic quality blocks ─────────────────────────────────────────────
 
 QualityArea = Literal["frontend", "backend"]
